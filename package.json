@@ -16,9 +16,11 @@
     "react-dom": "^17.0.2"
   },
   "devDependencies": {
-    "parcel": "^2.0.0",
+    "decimal.js": "^10.3.1",
+    "parcel": "^2.2.1",
     "purescript": "^0.14.5",
-    "purs-tidy": "^0.6.2",
-    "spago": "^0.20.3"
+    "purs-tidy": "^0.7.0",
+    "spago": "^0.20.3",
+    "xhr2": "^0.2.1"
   }
 }

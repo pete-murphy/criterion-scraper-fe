@@ -1,35 +1,101 @@
-module App where
+module App
+  ( mkApp
+  ) where
 
 import Prelude
 
-import Data.Foldable as Foldable
-import Effect.Class.Console as Console
-import Effect.Timer as Timer
-import React.Basic.DOM as R
-import React.Basic.DOM.Events as DOM.Events
+import Affjax as Affjax
+import Affjax.ResponseFormat as ResponseFormat
+import Control.Monad.Except (ExceptT(..))
+import Control.Monad.Except as Except
+import Control.Monad.Except as ExceptT
+import Data.Argonaut as Argonaut
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
+import Data.Monoid as Monoid
+import Effect.Aff (Aff)
+import Model.DateTime (DateTime)
+import React.Basic.DOM as DOM
 import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
-import React.Basic.Hooks as React
+import React.Basic.Hooks as Hooks
+import React.Basic.Hooks.Aff as Hooks.Aff
+
+type Movie =
+  { title :: String
+  , year :: Int
+  , director :: String
+  , thumbnailURL :: String
+  , detailsURL :: String
+  , movieId :: String
+  , country :: String
+  , created :: DateTime
+  , modified :: DateTime
+  }
+
+data AppError
+  = FetchError Affjax.Error
+  | DecodeError Argonaut.JsonDecodeError
+
+instance Show AppError where
+  show = renderAppError
+
+renderAppError :: AppError -> String
+renderAppError = case _ of
+  FetchError err -> Affjax.printError err
+  DecodeError err -> show err
+
+fetchMovies :: ExceptT AppError Aff (Array Movie)
+fetchMovies = do
+  let url = "http://167.99.230.0:8080/movies"
+  response <- ExceptT.withExceptT FetchError
+    (ExceptT (Affjax.get ResponseFormat.json url))
+  ExceptT.withExceptT DecodeError
+    (Except.except (Argonaut.decodeJson response.body))
 
 mkApp :: Component Unit
 mkApp = do
-  React.component "App" \_ -> React.do
-    text /\ setText <- React.useState' ""
-    timer /\ setTimer <- React.useState 0
-    React.useEffect text do
-      handle <- Timer.setInterval 1_000 (setTimer (_ + 1))
-      pure (setTimer (\_ -> 0) *> Timer.clearInterval handle)
+  movieList <- mkMovieList
+  Hooks.component "App" \_ -> Hooks.do
+    result <- Hooks.Aff.useAff unit do
+      Except.runExceptT fetchMovies
+    pure case result of
+      Nothing -> mempty
+      Just result' -> case result' of
+        Left appError -> DOM.text (show appError)
+        Right movies -> movieList movies
+
+mkMovieList :: Component (Array Movie)
+mkMovieList = do
+  movieListItem <- mkMovieListItem
+  Hooks.component "MovieList" \movies -> Hooks.do
     pure
-      ( R.div_
-          [ R.input
-              { onChange:
-                  Events.handler DOM.Events.targetValue
-                    ( Foldable.traverse_ \value -> do
-                        Console.log value
-                        setText value
-                    )
-              , value: text
+      ( DOM.ul
+          { className: "movie-list"
+          , children: movies <#> movieListItem
+          }
+      )
+
+mkMovieListItem :: Component Movie
+mkMovieListItem =
+  Hooks.component "MovieListItem" \movie -> Hooks.do
+    isLoading /\ setIsLoading <- Hooks.useState' true
+    pure
+      ( DOM.li_
+          [ DOM.div_ []
+          , DOM.figure
+              { className:
+                  Monoid.guard isLoading "hidden"
+              , children:
+                  [ DOM.img
+                      { src: movie.thumbnailURL
+                      , onLoad: Events.handler_ do
+                          setIsLoading false
+                      }
+                  ]
               }
-          , R.p_ [ R.text (show timer) ]
+          -- , DOM.h3_ [ DOM.text movie.title ]
+          -- , DOM.span_ [ DOM.text ("(" <> show movie.year <> ")") ]
+          -- , DOM.span_ [ DOM.text movie.director ]
           ]
       )

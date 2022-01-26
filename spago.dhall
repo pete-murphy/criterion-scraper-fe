@@ -12,17 +12,22 @@ to generate this file without the comments in this block.
 -}
 { name = "react-starter"
 , dependencies =
-  [ "console"
+  [ "affjax"
+  , "argonaut"
+  , "checked-exceptions"
+  , "console"
   , "effect"
   , "exceptions"
   , "foldable-traversable"
   , "js-timers"
   , "maybe"
+  , "precise-datetime"
   , "prelude"
   , "psci-support"
   , "react-basic"
   , "react-basic-dom"
   , "react-basic-hooks"
+  , "transformers"
   , "web-dom"
   , "web-html"
   ]
