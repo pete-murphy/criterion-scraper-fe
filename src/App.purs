@@ -10,12 +10,17 @@ import Control.Monad.Except (ExceptT(..))
 import Control.Monad.Except as Except
 import Control.Monad.Except as ExceptT
 import Data.Argonaut as Argonaut
+import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Foldable as Foldable
 import Data.Maybe (Maybe(..))
 import Data.Monoid as Monoid
+import Data.String (Pattern(..))
+import Data.String as String
 import Effect.Aff (Aff)
 import Model.DateTime (DateTime)
 import React.Basic.DOM as DOM
+import React.Basic.DOM.Events as DOM.Events
 import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
 import React.Basic.Hooks as Hooks
@@ -59,11 +64,30 @@ mkApp = do
   Hooks.component "App" \_ -> Hooks.do
     result <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchMovies
-    pure case result of
-      Nothing -> mempty
-      Just result' -> case result' of
-        Left appError -> DOM.text (show appError)
-        Right movies -> movieList movies
+    search /\ setSearch <- Hooks.useState' ""
+    pure
+      ( DOM.div_
+          [ DOM.input
+              { value: search
+              , onChange: Events.handler DOM.Events.targetValue do
+                  Foldable.traverse_ setSearch
+              }
+          , case result of
+              Nothing -> mempty
+              Just result' -> case result' of
+                Left appError -> DOM.text (show appError)
+                Right movies -> do
+                  let moviesFiltered = filterMovies search movies
+                  movieList moviesFiltered
+          ]
+      )
+
+filterMovies :: String -> Array Movie -> Array Movie
+filterMovies search = Array.take 15 <<< Array.filter \{ title, year, director, country } ->
+  String.contains (Pattern search) (String.toLower title)
+    || String.contains (Pattern search) (String.toLower (show year))
+    || String.contains (Pattern search) (String.toLower director)
+    || String.contains (Pattern search) (String.toLower country)
 
 mkMovieList :: Component (Array Movie)
 mkMovieList = do
@@ -77,7 +101,10 @@ mkMovieList = do
       )
 
 mkMovieListItem :: Component Movie
-mkMovieListItem =
+mkMovieListItem = do
+  -- TODO: Using this until `loading` attribute is added to `img`
+  -- https://github.com/lumihq/purescript-react-basic-dom/issues/25
+  img <- DOM.unsafeCreateDOMComponent "img"
   Hooks.component "MovieListItem" \movie -> Hooks.do
     isLoading /\ setIsLoading <- Hooks.useState' true
     pure
@@ -87,15 +114,13 @@ mkMovieListItem =
               { className:
                   Monoid.guard isLoading "hidden"
               , children:
-                  [ DOM.img
+                  [ Hooks.element img
                       { src: movie.thumbnailURL
                       , onLoad: Events.handler_ do
                           setIsLoading false
+                      , loading: "lazy"
                       }
                   ]
               }
-          -- , DOM.h3_ [ DOM.text movie.title ]
-          -- , DOM.span_ [ DOM.text ("(" <> show movie.year <> ")") ]
-          -- , DOM.span_ [ DOM.text movie.director ]
           ]
       )
