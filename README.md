@@ -1,17 +1,5 @@
-# PureScript React Basic Starter
+# Criterion Channel FE
 
-To get started, run
+:construction: **WIP**
 
-```shell
-npm install && npm run build
-```
-
-to install all dependencies.
-
-To run the app
-
-```shell
-npm run start
-```
-
-and open a browser to `localhost:1234`
+An alternative frontend for criterionchannel.com with improved UX.
