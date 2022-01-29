@@ -19,6 +19,8 @@ to generate this file without the comments in this block.
   , "effect"
   , "exceptions"
   , "foldable-traversable"
+  , "foreign-object"
+  , "integers"
   , "js-timers"
   , "maybe"
   , "precise-datetime"

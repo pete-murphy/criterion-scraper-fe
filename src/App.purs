@@ -13,12 +13,16 @@ import Data.Argonaut as Argonaut
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable as Foldable
+import Data.Int as Int
 import Data.Maybe (Maybe(..))
+import Data.Maybe as Maybe
 import Data.Monoid as Monoid
 import Data.String (Pattern(..))
 import Data.String as String
 import Effect.Aff (Aff)
+import Foreign.Object as Object
 import Model.DateTime (DateTime)
+import React.Basic as Basic
 import React.Basic.DOM as DOM
 import React.Basic.DOM.Events as DOM.Events
 import React.Basic.Events as Events
@@ -30,10 +34,10 @@ type Movie =
   { title :: String
   , year :: Int
   , director :: String
+  , country :: String
+  , movieId :: String
   , thumbnailURL :: String
   , detailsURL :: String
-  , movieId :: String
-  , country :: String
   , created :: DateTime
   , modified :: DateTime
   }
@@ -65,6 +69,10 @@ mkApp = do
     result <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchMovies
     search /\ setSearch <- Hooks.useState' ""
+
+    minYear /\ setMinYear <- Hooks.useState' ""
+    maxYear /\ setMaxYear <- Hooks.useState' ""
+
     pure
       ( DOM.div_
           [ DOM.input
@@ -72,22 +80,41 @@ mkApp = do
               , onChange: Events.handler DOM.Events.targetValue do
                   Foldable.traverse_ setSearch
               }
+          , DOM.input
+              { value: minYear
+              , onChange: Events.handler DOM.Events.targetValue do
+                  Foldable.traverse_ setMinYear
+              }
+          , DOM.input
+              { value: maxYear
+              , onChange: Events.handler DOM.Events.targetValue do
+                  Foldable.traverse_ setMaxYear
+              }
           , case result of
               Nothing -> mempty
               Just result' -> case result' of
                 Left appError -> DOM.text (show appError)
                 Right movies -> do
-                  let moviesFiltered = filterMovies search movies
+                  let moviesFiltered = filterMovies search minYear maxYear movies
                   movieList moviesFiltered
           ]
       )
 
-filterMovies :: String -> Array Movie -> Array Movie
-filterMovies search = Array.take 15 <<< Array.filter \{ title, year, director, country } ->
-  String.contains (Pattern search) (String.toLower title)
-    || String.contains (Pattern search) (String.toLower (show year))
-    || String.contains (Pattern search) (String.toLower director)
-    || String.contains (Pattern search) (String.toLower country)
+filterMovies :: String -> String -> String -> Array Movie -> Array Movie
+filterMovies search minYear maxYear =
+  Array.filter \{ title, year, director, country } ->
+    (isInYearRange minYear maxYear year) &&
+      ( String.contains (Pattern search) (String.toLower title)
+          || String.contains (Pattern search) (String.toLower (show year))
+          || String.contains (Pattern search) (String.toLower director)
+          || String.contains (Pattern search) (String.toLower country)
+      )
+  where
+  isInYearRange minYear' maxYear' year = Maybe.maybe true (\{ min, max } -> min <= year && year <= max)
+    ado
+      min <- Int.fromString minYear'
+      max <- Int.fromString maxYear'
+      in { min, max }
 
 mkMovieList :: Component (Array Movie)
 mkMovieList = do
@@ -96,7 +123,11 @@ mkMovieList = do
     pure
       ( DOM.ul
           { className: "movie-list"
-          , children: movies <#> movieListItem
+          , children: movies <#>
+              \movie ->
+                Basic.keyed
+                  (movie.title <> movie.director)
+                  (movieListItem movie)
           }
       )
 
@@ -111,16 +142,23 @@ mkMovieListItem = do
       ( DOM.li_
           [ DOM.div_ []
           , DOM.figure
-              { className:
-                  Monoid.guard isLoading "hidden"
+              { _data:
+                  Object.singleton "movie" movie.title
+
+              -- , className:
+              --     Monoid.guard isLoading "hidden"
               , children:
-                  [ Hooks.element img
-                      { src: movie.thumbnailURL
-                      , onLoad: Events.handler_ do
-                          setIsLoading false
-                      , loading: "lazy"
-                      }
+                  [ DOM.div_ [ DOM.text movie.title ]
+                  , DOM.div_ [ DOM.text (show movie.year) ]
+                  , DOM.div_ [ DOM.text movie.director ]
                   ]
+              -- [ Hooks.element img
+              --     { src: movie.thumbnailURL
+              --     , onLoad: Events.handler_ do
+              --         setIsLoading false
+              --     , loading: "lazy"
+              --     }
+              -- ]
               }
           ]
       )
