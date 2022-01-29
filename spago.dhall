@@ -16,6 +16,7 @@ to generate this file without the comments in this block.
   , "argonaut"
   , "checked-exceptions"
   , "console"
+  , "debug"
   , "effect"
   , "exceptions"
   , "foldable-traversable"
