@@ -14,11 +14,17 @@
 - [ ] Fuzzy-search text?
 - [ ] Suggestions if no matches?
 
+<!-- - [ ] Use blurhash for images? -->
+
+## Stretch goals
+
+(These will entail BE changes)
+
 - [ ] Ability to "tag" movies
 
-  - [ ] Persist those tags (in localStorage or DB)
+  - [ ] Persist those tags (in localStorage / DB)
 
-<!-- - [ ] Use blurhash for images? -->
+- [ ] Integrate with Letterboxd API (would need to learn the OAuth2 flow)
 
 ## Meta goals
 
