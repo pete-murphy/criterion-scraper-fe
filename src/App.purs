@@ -6,6 +6,7 @@ import Prelude
 
 import Affjax as Affjax
 import Affjax.ResponseFormat as ResponseFormat
+import Components.MUI.Autocomplete as Autocomplete
 import Components.MUI.Slider (Range)
 import Components.MUI.Slider as Slider
 import Control.Apply as Apply
@@ -19,12 +20,18 @@ import Data.Array.NonEmpty as NonEmpty
 import Data.Either (Either(..))
 import Data.Foldable as Foldable
 import Data.Int as Int
+import Data.Lens.Fold ((^?))
+import Data.Lens.Fold as Fold
+import Data.Lens.Prism.Either (_Right)
+import Data.Lens.Prism.Maybe (_Just)
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
 import Data.Monoid as Monoid
 import Data.Ord.Max (Max(..))
 import Data.Ord.Min (Min(..))
 import Data.Semigroup.Foldable as Semigroup.Foldable
+import Data.Set (Set)
+import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Traversable as Traversable
@@ -81,12 +88,26 @@ fetchMovies = do
 mkApp :: Component Unit
 mkApp = do
   movieList <- mkMovieList
-  yearFilterSlider <- mkYearFilterSlider
+  selectedYearsSlider <- mkSelectedYearsSlider
+  autocomplete <- Autocomplete.mkAutocomplete
   Hooks.component "App" \_ -> Hooks.do
     result <- Hooks.Aff.useAff unit do
+      Debug.traceM "Here"
       Except.runExceptT fetchMovies
     search /\ setSearch <- Hooks.useState' ""
-    yearFilter /\ setYearFilter <- Hooks.useState' Nothing
+    selectedYears /\ setSelectedYears <- Hooks.useState' Nothing
+    selectedDirectors /\ setSelectedDirectors <- Hooks.useState' []
+
+    options <- Hooks.useMemo (result ^? _Just <<< _Right) \_ ->
+      case result of
+        Just (Right movies) ->
+          case
+            Semigroup.Foldable.foldMap1
+              (\{ director } -> Set.singleton director)
+              movies
+            of
+            directors -> Array.fromFoldable directors
+        _ -> []
 
     pure
       ( DOM.div_
@@ -95,7 +116,7 @@ mkApp = do
               , onChange: Events.handler DOM.Events.targetValue do
                   Foldable.traverse_ setSearch
               }
-          , yearFilterSlider case result of
+          , selectedYearsSlider case result of
               Just (Right movies) -> Interactive
                 { bounds:
                     case
@@ -104,33 +125,42 @@ mkApp = do
                         movies
                       of
                       { min: Min min, max: Max max } -> { min, max }
-                , thumbs: yearFilter
-                , setThumbs: setYearFilter
+                , thumbs: selectedYears
+                , setThumbs: setSelectedYears
                 }
               _ -> NotInteractive
+          , autocomplete
+              { options
+              , value: selectedDirectors
+              , onChange: setSelectedDirectors
+              }
 
           , case result of
               Nothing -> mempty
               Just result' -> case result' of
                 Left appError -> DOM.text (show appError)
                 Right movies -> do
-                  let moviesFiltered = filterMovies search yearFilter movies
+                  let moviesFiltered = filterMovies { search, selectedDirectors, selectedYears } movies
                   movieList moviesFiltered
           ]
       )
 
-filterMovies :: String -> Maybe Range -> NonEmptyArray Movie -> Array Movie
-filterMovies search yearFilter = Array.take 24 <<<
+filterMovies
+  :: { search :: String
+     , selectedYears :: Maybe Range
+     , selectedDirectors :: Array String
+     }
+  -> NonEmptyArray Movie
+  -> Array Movie
+filterMovies { search, selectedYears, selectedDirectors } = Array.take 24 <<<
   NonEmpty.filter \{ title, year, director, country } ->
-    isYearInFilter year
-      &&
-        ( stringContainsSearch title
-            || stringContainsSearch director
-            || stringContainsSearch country
-        )
+    isInSelectedYears year
+      && fuzzySearchAny [ title, director, country ]
+      && (isSelectedDirector director || Foldable.null selectedDirectors)
   where
-  isYearInFilter year = Maybe.maybe true (\{ min, max } -> between min max year) yearFilter
-  stringContainsSearch = String.contains (Pattern (String.toLower search)) <<< String.toLower
+  isInSelectedYears year = Maybe.maybe true (\{ min, max } -> between min max year) selectedYears
+  fuzzySearchAny = Foldable.any (String.contains (Pattern (String.toLower search)) <<< String.toLower)
+  isSelectedDirector = flip Array.elem selectedDirectors
 
 mkMovieList :: Component (Array Movie)
 mkMovieList = do
@@ -179,7 +209,7 @@ mkMovieListItem = do
           ]
       )
 
-data YearFilterSliderProps
+data SelectedYearsSliderProps
   = NotInteractive
   | Interactive
       { bounds :: Range
@@ -187,10 +217,10 @@ data YearFilterSliderProps
       , setThumbs :: Maybe Range -> Effect Unit
       }
 
-mkYearFilterSlider :: Component YearFilterSliderProps
-mkYearFilterSlider = do
+mkSelectedYearsSlider :: Component SelectedYearsSliderProps
+mkSelectedYearsSlider = do
   slider <- Slider.mkSlider
-  Hooks.component "YearFilterSlider" \props -> Hooks.do
+  Hooks.component "selectedYearsSlider" \props -> Hooks.do
     enabled /\ setEnabled <- Hooks.useState false
     pure
       ( DOM.div_

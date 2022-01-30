@@ -22,3 +22,5 @@ instance DecodeJson DateTime where
         <<< RFC3339String
 
 derive newtype instance Show DateTime
+derive newtype instance Eq DateTime
+

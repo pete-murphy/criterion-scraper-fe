@@ -66,7 +66,7 @@ type SliderProps = {
   readonly max: number;
 };
 
-export function Slider_({
+export function slider_({
   value,
   setValue,
   minDistance,
