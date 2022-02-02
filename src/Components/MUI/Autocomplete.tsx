@@ -9,9 +9,7 @@ import { styled } from "@mui/material/styles";
 
 const Root = styled("div")(
   ({ theme }) => `
-  color: ${
-    theme.palette.mode === "dark" ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,.85)"
-  };
+  color: white;
   font-size: 14px;
 `
 );
@@ -26,7 +24,9 @@ const InputWrapper = styled("div")(
   ({ theme }) => `
   width: 300px;
   border: 1px solid ${theme.palette.mode === "dark" ? "#434343" : "#d9d9d9"};
+  border: 1px solid whitesmoke;
   background-color: ${theme.palette.mode === "dark" ? "#141414" : "#fff"};
+  background-color: hsl(0, 1.6%, 12%);
   border-radius: 4px;
   padding: 1px;
   display: flex;
@@ -34,20 +34,24 @@ const InputWrapper = styled("div")(
 
   &:hover {
     border-color: ${theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff"};
+    border-color: dodger-blue;
   }
 
   &.focused {
     border-color: ${theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff"};
+    border-color: dodger-blue;
     box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
   }
 
   & input {
     background-color: ${theme.palette.mode === "dark" ? "#141414" : "#fff"};
+    background-color: hsl(0, 1.6%, 12%);
     color: ${
       theme.palette.mode === "dark"
         ? "rgba(255,255,255,0.65)"
         : "rgba(0,0,0,.85)"
     };
+    color: white;
     height: 30px;
     box-sizing: border-box;
     padding: 4px 6px;
@@ -85,7 +89,9 @@ const StyledTag = styled(Tag)<TagProps>(
   background-color: ${
     theme.palette.mode === "dark" ? "rgba(255,255,255,0.08)" : "#fafafa"
   };
+  background-color: hsl(0, 1.6%, 20%);
   border: 1px solid ${theme.palette.mode === "dark" ? "#303030" : "#e8e8e8"};
+  border: hsl(0, 1.6%, 12%);
   border-radius: 2px;
   box-sizing: content-box;
   padding: 0 4px 0 10px;
@@ -94,7 +100,9 @@ const StyledTag = styled(Tag)<TagProps>(
 
   &:focus {
     border-color: ${theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff"};
+    border-color: dodgerblue;
     background-color: ${theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff"};
+    background-color: hsl(0, 1.6%, 24%);
   }
 
   & span {
@@ -119,6 +127,7 @@ const Listbox = styled("ul")(
   position: absolute;
   list-style: none;
   background-color: ${theme.palette.mode === "dark" ? "#141414" : "#fff"};
+  background-color: hsl(0, 1.6%, 12%);
   overflow: auto;
   max-height: 250px;
   border-radius: 4px;
@@ -140,6 +149,7 @@ const Listbox = styled("ul")(
 
   & li[aria-selected='true'] {
     background-color: ${theme.palette.mode === "dark" ? "#2b2b2b" : "#fafafa"};
+    background-color: hsl(0, 1.6%, 20%);
     font-weight: 600;
 
     & svg {
@@ -147,8 +157,9 @@ const Listbox = styled("ul")(
     }
   }
 
-  & li[data-focus='true'] {
+  & li[data-focus='true'], & .Mui-focused {
     background-color: ${theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff"};
+    background-color: hsl(0, 1.6%, 24%);
     cursor: pointer;
 
     & svg {
@@ -164,6 +175,7 @@ type Props<A extends string> = {
   readonly getOptionLabel?: (a: A) => string;
   readonly value: Array<A>;
   readonly onChange: (as: Array<A>) => void;
+  readonly label: string;
   // readonly inputValue: string;
   // readonly onInputChange: (input: string) => void;
 };
@@ -193,7 +205,7 @@ export function autocomplete_<A extends string>(props: Props<A>) {
   return (
     <Root>
       <div {...getRootProps()}>
-        <Label {...getInputLabelProps()}>Customized hook</Label>
+        <Label {...getInputLabelProps()}>{props.label}</Label>
         <InputWrapper ref={setAnchorEl} className={focused ? "focused" : ""}>
           {value.map((option: A, index: number) => (
             <StyledTag

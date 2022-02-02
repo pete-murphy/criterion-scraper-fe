@@ -56,14 +56,14 @@ var Close_1 = __importDefault(require("@mui/icons-material/Close"));
 var styles_1 = require("@mui/material/styles");
 var Root = (0, styles_1.styled)("div")(function (_a) {
     var theme = _a.theme;
-    return "\n  color: ".concat(theme.palette.mode === "dark" ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,.85)", ";\n  font-size: 14px;\n");
+    return "\n  color: white;\n  font-size: 14px;\n";
 });
 var Label = (0, styles_1.styled)("label")(templateObject_1 || (templateObject_1 = __makeTemplateObject(["\n  padding: 0 0 4px;\n  line-height: 1.5;\n  display: block;\n"], ["\n  padding: 0 0 4px;\n  line-height: 1.5;\n  display: block;\n"])));
 var InputWrapper = (0, styles_1.styled)("div")(function (_a) {
     var theme = _a.theme;
-    return "\n  width: 300px;\n  border: 1px solid ".concat(theme.palette.mode === "dark" ? "#434343" : "#d9d9d9", ";\n  background-color: ").concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n  border-radius: 4px;\n  padding: 1px;\n  display: flex;\n  flex-wrap: wrap;\n\n  &:hover {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n  }\n\n  &.focused {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);\n  }\n\n  & input {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n    color: ").concat(theme.palette.mode === "dark"
+    return "\n  width: 300px;\n  border: 1px solid ".concat(theme.palette.mode === "dark" ? "#434343" : "#d9d9d9", ";\n  border: 1px solid whitesmoke;\n  background-color: ").concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n  background-color: hsl(0, 1.6%, 12%);\n  border-radius: 4px;\n  padding: 1px;\n  display: flex;\n  flex-wrap: wrap;\n\n  &:hover {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n    border-color: dodger-blue;\n  }\n\n  &.focused {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n    border-color: dodger-blue;\n    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);\n  }\n\n  & input {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n    background-color: hsl(0, 1.6%, 12%);\n    color: ").concat(theme.palette.mode === "dark"
         ? "rgba(255,255,255,0.65)"
-        : "rgba(0,0,0,.85)", ";\n    height: 30px;\n    box-sizing: border-box;\n    padding: 4px 6px;\n    width: 0;\n    min-width: 30px;\n    flex-grow: 1;\n    border: 0;\n    margin: 0;\n    outline: 0;\n  }\n");
+        : "rgba(0,0,0,.85)", ";\n    color: white;\n    height: 30px;\n    box-sizing: border-box;\n    padding: 4px 6px;\n    width: 0;\n    min-width: 30px;\n    flex-grow: 1;\n    border: 0;\n    margin: 0;\n    outline: 0;\n  }\n");
 });
 function Tag(props) {
     var label = props.label, onDelete = props.onDelete, other = __rest(props, ["label", "onDelete"]);
@@ -73,11 +73,11 @@ function Tag(props) {
 }
 var StyledTag = (0, styles_1.styled)(Tag)(function (_a) {
     var theme = _a.theme;
-    return "\n  display: flex;\n  align-items: center;\n  height: 24px;\n  margin: 2px;\n  line-height: 22px;\n  background-color: ".concat(theme.palette.mode === "dark" ? "rgba(255,255,255,0.08)" : "#fafafa", ";\n  border: 1px solid ").concat(theme.palette.mode === "dark" ? "#303030" : "#e8e8e8", ";\n  border-radius: 2px;\n  box-sizing: content-box;\n  padding: 0 4px 0 10px;\n  outline: 0;\n  overflow: hidden;\n\n  &:focus {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n    background-color: ").concat(theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff", ";\n  }\n\n  & span {\n    overflow: hidden;\n    white-space: nowrap;\n    text-overflow: ellipsis;\n  }\n\n  & svg {\n    font-size: 12px;\n    cursor: pointer;\n    padding: 4px;\n  }\n");
+    return "\n  display: flex;\n  align-items: center;\n  height: 24px;\n  margin: 2px;\n  line-height: 22px;\n  background-color: ".concat(theme.palette.mode === "dark" ? "rgba(255,255,255,0.08)" : "#fafafa", ";\n  background-color: hsl(0, 1.6%, 20%);\n  border: 1px solid ").concat(theme.palette.mode === "dark" ? "#303030" : "#e8e8e8", ";\n  border: hsl(0, 1.6%, 12%);\n  border-radius: 2px;\n  box-sizing: content-box;\n  padding: 0 4px 0 10px;\n  outline: 0;\n  overflow: hidden;\n\n  &:focus {\n    border-color: ").concat(theme.palette.mode === "dark" ? "#177ddc" : "#40a9ff", ";\n    border-color: dodgerblue;\n    background-color: ").concat(theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff", ";\n    background-color: hsl(0, 1.6%, 24%);\n  }\n\n  & span {\n    overflow: hidden;\n    white-space: nowrap;\n    text-overflow: ellipsis;\n  }\n\n  & svg {\n    font-size: 12px;\n    cursor: pointer;\n    padding: 4px;\n  }\n");
 });
 var Listbox = (0, styles_1.styled)("ul")(function (_a) {
     var theme = _a.theme;
-    return "\n  width: 300px;\n  margin: 2px 0 0;\n  padding: 0;\n  position: absolute;\n  list-style: none;\n  background-color: ".concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n  overflow: auto;\n  max-height: 250px;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);\n  z-index: 1;\n\n  & li {\n    padding: 5px 12px;\n    display: flex;\n\n    & span {\n      flex-grow: 1;\n    }\n\n    & svg {\n      color: transparent;\n    }\n  }\n\n  & li[aria-selected='true'] {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#2b2b2b" : "#fafafa", ";\n    font-weight: 600;\n\n    & svg {\n      color: #1890ff;\n    }\n  }\n\n  & li[data-focus='true'] {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff", ";\n    cursor: pointer;\n\n    & svg {\n      color: currentColor;\n    }\n  }\n");
+    return "\n  width: 300px;\n  margin: 2px 0 0;\n  padding: 0;\n  position: absolute;\n  list-style: none;\n  background-color: ".concat(theme.palette.mode === "dark" ? "#141414" : "#fff", ";\n  background-color: hsl(0, 1.6%, 12%);\n  overflow: auto;\n  max-height: 250px;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);\n  z-index: 1;\n\n  & li {\n    padding: 5px 12px;\n    display: flex;\n\n    & span {\n      flex-grow: 1;\n    }\n\n    & svg {\n      color: transparent;\n    }\n  }\n\n  & li[aria-selected='true'] {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#2b2b2b" : "#fafafa", ";\n    background-color: hsl(0, 1.6%, 20%);\n    font-weight: 600;\n\n    & svg {\n      color: #1890ff;\n    }\n  }\n\n  & li[data-focus='true'], & .Mui-focused {\n    background-color: ").concat(theme.palette.mode === "dark" ? "#003b57" : "#e6f7ff", ";\n    background-color: hsl(0, 1.6%, 24%);\n    cursor: pointer;\n\n    & svg {\n      color: currentColor;\n    }\n  }\n");
 });
 // TODO: Don't fix this to string
 function autocomplete_(props) {
@@ -92,7 +92,7 @@ function autocomplete_(props) {
     }), getRootProps = _b.getRootProps, getInputLabelProps = _b.getInputLabelProps, getInputProps = _b.getInputProps, getTagProps = _b.getTagProps, getListboxProps = _b.getListboxProps, getOptionProps = _b.getOptionProps, groupedOptions = _b.groupedOptions, value = _b.value, focused = _b.focused, setAnchorEl = _b.setAnchorEl;
     return (React.createElement(Root, null,
         React.createElement("div", __assign({}, getRootProps()),
-            React.createElement(Label, __assign({}, getInputLabelProps()), "Customized hook"),
+            React.createElement(Label, __assign({}, getInputLabelProps()), props.label),
             React.createElement(InputWrapper, { ref: setAnchorEl, className: focused ? "focused" : "" },
                 value.map(function (option, index) { return (React.createElement(StyledTag, __assign({ label: getOptionLabel(option) }, getTagProps({ index: index })))); }),
                 React.createElement("input", __assign({}, getInputProps())))),

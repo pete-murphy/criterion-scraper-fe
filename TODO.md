@@ -1,3 +1,5 @@
+## Features
+
 - [x] Filters for year range
 
 - [ ] Autocomplete search (multiple values) for each of: (Director, Country, (Tags?))
@@ -14,7 +16,14 @@
 - [ ] Fuzzy-search text?
 - [ ] Suggestions if no matches?
 
-<!-- - [ ] Use blurhash for images? -->
+## Bugs
+
+- [ ] Director is nullable
+
+## Probably no longer relevant
+
+- [ ] Use blurhash for images?
+  - Can use smaller images now ...
 
 ## Stretch goals
 

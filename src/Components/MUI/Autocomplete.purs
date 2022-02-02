@@ -15,6 +15,7 @@ type Props =
   { options :: Array String
   , value :: Array String
   , onChange :: Array String -> Effect Unit
+  , label :: String
   }
 
 mkAutocomplete :: Component Props
@@ -26,16 +27,14 @@ mkAutocomplete = do
           { options: props.options
           , value: props.value
           , onChange: Uncurried.mkEffectFn1 props.onChange
+          , label: props.label
           }
       )
 
--- readonly options: Array<A>;
--- readonly getOptionLabel?: (a: A) => string;
--- readonly value: Array<A>;
--- readonly onChange: (as: Array<A>) => void;
 foreign import autocomplete_
   :: Basic.ReactComponent
        { options :: Array String
        , value :: Array String
        , onChange :: EffectFn1 (Array String) Unit
+       , label :: String
        }

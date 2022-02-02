@@ -9,6 +9,7 @@ import Affjax.ResponseFormat as ResponseFormat
 import Components.MUI.Autocomplete as Autocomplete
 import Components.MUI.Slider (Range)
 import Components.MUI.Slider as Slider
+import Control.Alternative as Alternativ
 import Control.Apply as Apply
 import Control.Monad.Except (ExceptT(..))
 import Control.Monad.Except as Except
@@ -18,12 +19,17 @@ import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmpty
 import Data.Either (Either(..))
+import Data.Enum (class Enum)
 import Data.Foldable as Foldable
+import Data.Generic.Rep (class Generic)
 import Data.Int as Int
+import Data.Lens (Lens, Lens')
+import Data.Lens as Lens
 import Data.Lens.Fold ((^?))
 import Data.Lens.Fold as Fold
 import Data.Lens.Prism.Either (_Right)
 import Data.Lens.Prism.Maybe (_Just)
+import Data.Lens.Record as Lens.Record
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
 import Data.Monoid as Monoid
@@ -32,14 +38,17 @@ import Data.Ord.Min (Min(..))
 import Data.Semigroup.Foldable as Semigroup.Foldable
 import Data.Set (Set)
 import Data.Set as Set
+import Data.Show.Generic as Generic
 import Data.String (Pattern(..))
 import Data.String as String
+import Data.Symbol (class IsSymbol)
 import Data.Traversable as Traversable
 import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Foreign.Object as Object
 import Model.DateTime (DateTime)
+import Prim.Row (class Cons)
 import React.Basic as Basic
 import React.Basic.DOM as DOM
 import React.Basic.DOM.Events as DOM.Events
@@ -47,6 +56,8 @@ import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
 import React.Basic.Hooks as Hooks
 import React.Basic.Hooks.Aff as Hooks.Aff
+import Record as Record
+import Type.Proxy (Proxy(..))
 
 type Movie =
   { title :: String
@@ -90,24 +101,32 @@ mkApp = do
   movieList <- mkMovieList
   selectedYearsSlider <- mkSelectedYearsSlider
   autocomplete <- Autocomplete.mkAutocomplete
+  sortMethodSelector <- mkSortMethodSelector
+
   Hooks.component "App" \_ -> Hooks.do
     result <- Hooks.Aff.useAff unit do
-      Debug.traceM "Here"
       Except.runExceptT fetchMovies
     search /\ setSearch <- Hooks.useState' ""
     selectedYears /\ setSelectedYears <- Hooks.useState' Nothing
     selectedDirectors /\ setSelectedDirectors <- Hooks.useState' []
+    selectedCountries /\ setSelectedCountries <- Hooks.useState' []
+    selectedSortMethods /\ setSelectedSortMethods <- Hooks.useState
+      [ { key: Title, orientation: Neutral }
+      , { key: Year, orientation: Neutral }
+      , { key: Director, orientation: Neutral }
+      , { key: Country, orientation: Neutral }
+      ]
 
     options <- Hooks.useMemo (result ^? _Just <<< _Right) \_ ->
       case result of
         Just (Right movies) ->
           case
             Semigroup.Foldable.foldMap1
-              (\{ director } -> Set.singleton director)
+              (\{ director, country } -> { directors: Set.singleton director, countries: Set.singleton country })
               movies
             of
-            directors -> Array.fromFoldable directors
-        _ -> []
+            { directors, countries } -> { directors: Array.fromFoldable directors, countries: Array.fromFoldable countries }
+        _ -> mempty
 
     pure
       ( DOM.div_
@@ -130,9 +149,20 @@ mkApp = do
                 }
               _ -> NotInteractive
           , autocomplete
-              { options
+              { options: options.directors
               , value: selectedDirectors
               , onChange: setSelectedDirectors
+              , label: "Filter by director"
+              }
+          , autocomplete
+              { options: options.countries
+              , value: selectedCountries
+              , onChange: setSelectedCountries
+              , label: "Filter by country"
+              }
+          , sortMethodSelector
+              { options: selectedSortMethods
+              , setOptions: setSelectedSortMethods
               }
 
           , case result of
@@ -140,7 +170,7 @@ mkApp = do
               Just result' -> case result' of
                 Left appError -> DOM.text (show appError)
                 Right movies -> do
-                  let moviesFiltered = filterMovies { search, selectedDirectors, selectedYears } movies
+                  let moviesFiltered = filterMovies { search, selectedDirectors, selectedYears, selectedCountries } movies
                   movieList moviesFiltered
           ]
       )
@@ -149,18 +179,24 @@ filterMovies
   :: { search :: String
      , selectedYears :: Maybe Range
      , selectedDirectors :: Array String
+     , selectedCountries :: Array String
      }
   -> NonEmptyArray Movie
   -> Array Movie
-filterMovies { search, selectedYears, selectedDirectors } = Array.take 24 <<<
+filterMovies { search, selectedYears, selectedDirectors, selectedCountries } = Array.take 24 <<<
   NonEmpty.filter \{ title, year, director, country } ->
     isInSelectedYears year
       && fuzzySearchAny [ title, director, country ]
-      && (isSelectedDirector director || Foldable.null selectedDirectors)
+      &&
+        ( isSelectedDirector director
+            || isSelectedCountry country
+            || (Foldable.all Foldable.null [ selectedDirectors, selectedCountries ])
+        )
   where
   isInSelectedYears year = Maybe.maybe true (\{ min, max } -> between min max year) selectedYears
   fuzzySearchAny = Foldable.any (String.contains (Pattern (String.toLower search)) <<< String.toLower)
   isSelectedDirector = flip Array.elem selectedDirectors
+  isSelectedCountry = flip Array.elem selectedCountries
 
 mkMovieList :: Component (Array Movie)
 mkMovieList = do
@@ -169,11 +205,13 @@ mkMovieList = do
     pure
       ( DOM.ul
           { className: "movie-list"
-          , children: movies <#>
-              \movie ->
-                Basic.keyed
-                  movie.movieId
-                  (movieListItem movie)
+          , children: -- movies <#>
+
+              [] <#>
+                \movie ->
+                  Basic.keyed
+                    movie.movieId
+                    (movieListItem movie)
           }
       )
 
@@ -252,3 +290,97 @@ mkSelectedYearsSlider = do
                 else mempty
           ]
       )
+
+data MovieKey
+  = Title
+  | Year
+  | Director
+  | Country
+
+derive instance Generic MovieKey _
+derive instance Eq MovieKey
+derive instance Ord MovieKey
+
+instance Show MovieKey where
+  show = Generic.genericShow
+
+data KeyOrientation
+  = Neutral
+  | Ascending
+  | Descending
+
+derive instance Generic KeyOrientation _
+derive instance Eq KeyOrientation
+derive instance Ord KeyOrientation
+
+instance Show KeyOrientation where
+  show = Generic.genericShow
+
+type SortMethod = { key :: MovieKey, orientation :: KeyOrientation }
+
+mkSortMethodSelector
+  :: Component
+       { options :: Array SortMethod
+       , setOptions :: (Array SortMethod -> Array SortMethod) -> Effect Unit
+       }
+mkSortMethodSelector = do
+  Hooks.component "SortMethodSelector" \props -> Hooks.do
+    isDragging /\ setIsDragging <- Hooks.useState' Nothing
+    isDraggedOver /\ setIsDraggedOver <- Hooks.useState' Nothing
+    localOptions /\ setLocalOptions <- Hooks.useState props.options
+
+    -- Debug.traceM do (Array.insertAt 2 { key: Title, orientation: Ascending }) props.options
+    pure do
+      Basic.fragment
+        [ DOM.text (show isDragging)
+        , DOM.text (show isDraggedOver)
+        , ( DOM.ul
+              { className: "drag-ul"
+              , onDrop: Events.handler_ do
+                  Debug.traceM "drop"
+              , children: localOptions `flip Array.mapWithIndex` \i option -> do
+                  let
+                    isDraggingOverOther = Maybe.fromMaybe false ado
+                      dragging <- isDragging
+                      draggedOver <- isDraggedOver
+                      in dragging.i /= draggedOver
+                    thisIsTheOneDragging = Maybe.maybe false (\dragging -> dragging.i == i) isDragging
+                    thisIsTheOneDraggedOVer = Foldable.elem i isDraggedOver
+                    shouldHideThisItem = thisIsTheOneDragging && isDraggingOverOther
+                  Debug.trace ("This is the one dragging (" <> show i <> "): " <> show thisIsTheOneDragging) \_ -> do
+                    Basic.fragment do
+                      -- ( Monoid.guard (i `Foldable.elem` isDraggedOver && not (i `Foldable.elem` isDragging || (i - 1) `Foldable.elem` isDragging))
+                      --     [ DOM.li_ []
+                      --     ]
+                      -- ) <>
+
+                      [ DOM.li
+                          { onDragStart: Events.handler_ do
+                              Debug.traceM "dragStart"
+                              -- Debug.traceM e
+                              setIsDragging (Just { i, option })
+
+                          , onDragOver: Events.handler_ do
+                              -- Debug.traceM ("dragOver" <> show i)
+                              setIsDraggedOver (Just i)
+                          , onDragEnter: Events.handler_ do
+                              Foldable.for_ isDragging \{ option } -> setLocalOptions \options ->
+                                Maybe.fromMaybe options (Array.insertAt i option options)
+                          , onDragLeave: Events.handler_ do
+                              Foldable.for_ isDragging \{ option } -> setLocalOptions \_options -> props.options
+
+                          , onDragEnd: Events.handler_ do
+                              Debug.traceM "dragEnd"
+                              setIsDragging Nothing
+                              setIsDraggedOver Nothing
+                          , children:
+                              [ DOM.text (show option.key)
+                              ]
+                          , hidden: shouldHideThisItem
+                          , draggable: true
+                          }
+                      ] <> (Monoid.guard (isDraggingOverOther && thisIsTheOneDraggedOVer) [ DOM.li_ [] ])
+              }
+          )
+        ]
+
