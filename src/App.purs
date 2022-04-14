@@ -104,7 +104,7 @@ mkApp = do
   sortMethodSelector <- mkSortMethodSelector
 
   Hooks.component "App" \_ -> Hooks.do
-    result <- Hooks.Aff.useAff unit do
+    fetchMoviesResult <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchMovies
     search /\ setSearch <- Hooks.useState' ""
     selectedYears /\ setSelectedYears <- Hooks.useState' Nothing
@@ -117,8 +117,8 @@ mkApp = do
       , { key: Country, orientation: Neutral }
       ]
 
-    options <- Hooks.useMemo (result ^? _Just <<< _Right) \_ ->
-      case result of
+    options <- Hooks.useMemo (fetchMoviesResult ^? _Just <<< _Right) \_ ->
+      case fetchMoviesResult of
         Just (Right movies) ->
           case
             Semigroup.Foldable.foldMap1
@@ -135,7 +135,7 @@ mkApp = do
               , onChange: Events.handler DOM.Events.targetValue do
                   Foldable.traverse_ setSearch
               }
-          , selectedYearsSlider case result of
+          , selectedYearsSlider case fetchMoviesResult of
               Just (Right movies) -> Interactive
                 { bounds:
                     case
@@ -165,7 +165,7 @@ mkApp = do
               , setOptions: setSelectedSortMethods
               }
 
-          , case result of
+          , case fetchMoviesResult of
               Nothing -> mempty
               Just result' -> case result' of
                 Left appError -> DOM.text (show appError)
@@ -183,7 +183,7 @@ filterMovies
      }
   -> NonEmptyArray Movie
   -> Array Movie
-filterMovies { search, selectedYears, selectedDirectors, selectedCountries } = Array.take 24 <<<
+filterMovies { search, selectedYears, selectedDirectors, selectedCountries } =
   NonEmpty.filter \{ title, year, director, country } ->
     isInSelectedYears year
       && fuzzySearchAny [ title, director, country ]
@@ -205,13 +205,11 @@ mkMovieList = do
     pure
       ( DOM.ul
           { className: "movie-list"
-          , children: -- movies <#>
-
-              [] <#>
-                \movie ->
-                  Basic.keyed
-                    movie.movieId
-                    (movieListItem movie)
+          , children: movies <#>
+              \movie ->
+                Basic.keyed
+                  movie.movieId
+                  (movieListItem movie)
           }
       )
 
