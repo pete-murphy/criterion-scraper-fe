@@ -2,6 +2,54 @@ import * as React from "react";
 import SliderUnstyled from "@mui/base/SliderUnstyled";
 import * as MUI from "@mui/system";
 
+type SliderProps = {
+  readonly value: Array<number>;
+  readonly setValue: (value: Array<number>) => void;
+  readonly minDistance: number;
+  readonly min: number;
+  readonly max: number;
+};
+
+export function slider_({
+  value,
+  setValue,
+  minDistance,
+  min,
+  max,
+}: SliderProps) {
+  const onChange = (_event: unknown, newValue: number, activeThumb: number) => {
+    if (!Array.isArray(newValue)) {
+      return;
+    }
+
+    if (newValue[1] - newValue[0] < minDistance) {
+      if (activeThumb === 0) {
+        const clamped = Math.min(newValue[0], max - minDistance);
+        setValue([clamped, clamped + minDistance]);
+      } else {
+        const clamped = Math.max(newValue[1], min + minDistance);
+        setValue([clamped - minDistance, clamped]);
+      }
+    } else {
+      setValue(newValue);
+    }
+  };
+
+  return (
+    <MUI.Box sx={{ width: 300 }}>
+      <Slider
+        getAriaLabel={() => "Minimum distance shift"}
+        value={value}
+        onChange={onChange}
+        valueLabelDisplay={"off"}
+        disableSwap
+        min={min}
+        max={max}
+      />
+    </MUI.Box>
+  );
+}
+
 const Slider = MUI.styled(SliderUnstyled)(`
   color: tomato;
   height: 4px;
@@ -57,51 +105,3 @@ const Slider = MUI.styled(SliderUnstyled)(`
     }
   }
 `);
-
-type SliderProps = {
-  readonly value: Array<number>;
-  readonly setValue: (value: Array<number>) => void;
-  readonly minDistance: number;
-  readonly min: number;
-  readonly max: number;
-};
-
-export function slider_({
-  value,
-  setValue,
-  minDistance,
-  min,
-  max,
-}: SliderProps) {
-  const onChange = (_event: unknown, newValue: number, activeThumb: number) => {
-    if (!Array.isArray(newValue)) {
-      return;
-    }
-
-    if (newValue[1] - newValue[0] < minDistance) {
-      if (activeThumb === 0) {
-        const clamped = Math.min(newValue[0], max - minDistance);
-        setValue([clamped, clamped + minDistance]);
-      } else {
-        const clamped = Math.max(newValue[1], min + minDistance);
-        setValue([clamped - minDistance, clamped]);
-      }
-    } else {
-      setValue(newValue);
-    }
-  };
-
-  return (
-    <MUI.Box sx={{ width: 300 }}>
-      <Slider
-        getAriaLabel={() => "Minimum distance shift"}
-        value={value}
-        onChange={onChange}
-        valueLabelDisplay={"off"}
-        disableSwap
-        min={min}
-        max={max}
-      />
-    </MUI.Box>
-  );
-}

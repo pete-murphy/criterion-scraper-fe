@@ -6,6 +6,7 @@
   "scripts": {
     "build": "spago build",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "start:ts": "tsc -p ./tsconfig.json --watch",
     "start": "parcel html/index.html"
   },
   "keywords": [],
@@ -17,10 +18,14 @@
     "@mui/icons-material": "^5.3.1",
     "@mui/material": "^5.3.1",
     "react": "^17.0.2",
+    "react-beautiful-dnd": "^13.1.0",
+    "react-dnd": "^16.0.0",
+    "react-dnd-html5-backend": "^16.0.0",
     "react-dom": "^17.0.2"
   },
   "devDependencies": {
     "@types/react": "^17.0.38",
+    "@types/react-beautiful-dnd": "^13.1.2",
     "@types/react-dom": "^17.0.11",
     "decimal.js": "^10.3.1",
     "parcel": "^2.2.1",

@@ -5,10 +5,19 @@
   color: white;
 }
 
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
 .movie-list {
   list-style: none;
   padding: 0;
   display: grid;
+  width: 100%;
+  /* background: green; */
   grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
   gap: 1rem;
 }
@@ -50,4 +59,113 @@
   grid-row: 1 / -1;
   width: 100%;
   background-color: hsl(0, 1.3%, 15.5%);
+}
+
+.drag-ul {
+  width: fit-content;
+  display: flex;
+  flex-basis: auto;
+  flex-flow: column;
+  padding: 0;
+  gap: 0.2rem;
+}
+
+.drag-ul > li {
+  padding: 0.2rem 0.8rem;
+  border-radius: 0.8rem;
+  display: inline;
+  width: fit-content;
+  cursor: default;
+  background-color: transparent;
+  border: 1px solid hsl(0, 1.3%, 25.5%);
+  opacity: 0.5;
+}
+.drag-ul > li.selected {
+  border: 1px solid transparent;
+  background-color: hsl(0, 1.3%, 25.5%) !important;
+  opacity: 1;
+}
+
+.drag-ul .item-contents {
+  display: inline-grid;
+  grid-auto-flow: column;
+  /* grid-template-columns: 0.6rem auto; */
+  justify-items: center;
+  align-content: center;
+  gap: 0.4rem;
+}
+/* .drag-ul .neutral {
+  opacity: 0.5;
+} */
+
+.search {
+  display: flex;
+  flex-flow: column;
+  font-size: 1rem;
+  gap: 0.4rem;
+}
+
+main {
+  height: 100%;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: max-content 1fr;
+  /* background: red; */
+  gap: 1rem;
+}
+
+main > * {
+  overflow: auto;
+}
+
+main > section {
+  display: grid;
+  /* background: red; */
+  padding: 0.4rem;
+}
+
+main > section:first-of-type {
+  padding-block-start: 4rem;
+}
+
+main > section:first-of-type > div {
+  display: inline-flex;
+  flex-flow: column;
+  gap: 1.2rem;
+}
+/* input[type="search"] {
+  width: 300px;
+  border: 1px solid whitesmoke;
+  background-color: hsl(0, 1.6%, 12%);
+  border-radius: 4px;
+  padding: 1px;
+  display: flex;
+  flex-wrap: wrap;
+} */
+/* input[]:focused {
+  border-color: dodger-blue;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+} */
+
+input[type="search"] {
+  width: 300px;
+  border: 1px solid whitesmoke;
+  background-color: hsl(0, 1.6%, 12%);
+  border-radius: 4px;
+  color: white;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  min-width: 30px;
+  flex-grow: 1;
+  margin: 0;
+  outline: 0;
+}
+
+label {
+  font-size: 0.8rem;
+}
+
+input[type="search"]:hover {
+  border-color: dodger-blue;
 }
