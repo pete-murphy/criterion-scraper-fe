@@ -16,45 +16,31 @@ import Control.Monad.Except as Except
 import Control.Monad.Except as ExceptT
 import Control.Monad.ST as ST
 import Data.Argonaut as Argonaut
-import Data.Array ((!!))
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmpty
 import Data.Array.ST as Array.ST
 import Data.Either (Either(..))
-import Data.Enum (class Enum)
 import Data.Foldable (class Foldable)
 import Data.Foldable as Foldable
 import Data.Generic.Rep (class Generic)
-import Data.Int as Int
-import Data.Lens (Lens, Lens')
-import Data.Lens as Lens
 import Data.Lens.Fold ((^?))
-import Data.Lens.Fold as Fold
 import Data.Lens.Prism.Either (_Right)
 import Data.Lens.Prism.Maybe (_Just)
-import Data.Lens.Record as Lens.Record
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
 import Data.Monoid as Monoid
 import Data.Ord.Max (Max(..))
 import Data.Ord.Min (Min(..))
-import Data.Ordering as Ordering
 import Data.Semigroup.Foldable as Semigroup.Foldable
-import Data.Set (Set)
 import Data.Set as Set
 import Data.Show.Generic as Generic
 import Data.String (Pattern(..))
 import Data.String as String
-import Data.Symbol (class IsSymbol)
-import Data.Traversable as Traversable
-import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Foreign.Object as Object
 import Model.DateTime (DateTime)
-import Partial.Unsafe as Partial.Unsafe
-import Prim.Row (class Cons)
 import React.Basic as Basic
 import React.Basic.DOM as DOM
 import React.Basic.DOM.Events as DOM.Events
@@ -62,9 +48,6 @@ import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
 import React.Basic.Hooks as Hooks
 import React.Basic.Hooks.Aff as Hooks.Aff
-import Record as Record
-import Type.Proxy (Proxy(..))
-import Web.HTML.Event.DataTransfer as DataTransfer
 
 type Movie =
   { title :: String
@@ -361,9 +344,9 @@ movieKeyToComparison = case _ of
 sortMethodsToComparison :: forall t. Foldable t => t SortMethod -> Movie -> Movie -> Ordering
 sortMethodsToComparison = Foldable.foldMap interpret
   where
-  interpret { orientation: Neutral } = \_ _ -> EQ
+  interpret { orientation: Neutral } = mempty
   interpret { key, orientation: Ascending } = movieKeyToComparison key
-  interpret { key, orientation: Descending } = Ordering.invert `map <<< map` movieKeyToComparison key
+  interpret { key, orientation: Descending } = flip (movieKeyToComparison key)
 
 toggleOrientation :: KeyOrientation -> KeyOrientation
 toggleOrientation = case _ of
