@@ -11,3 +11,4 @@
 /.cache/
 /dist/
 /.parcel-cache/
+/dce-output/

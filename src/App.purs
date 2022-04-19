@@ -37,6 +37,7 @@ import Data.Set as Set
 import Data.Show.Generic as Generic
 import Data.String (Pattern(..))
 import Data.String as String
+import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Foreign.Object as Object
@@ -54,11 +55,16 @@ type Movie =
   , year :: Int
   , director :: String
   , country :: String
-  , movieId :: String
+  , movieID :: String
   , thumbnailURL :: String
   , detailsURL :: String
   , created :: DateTime
   , modified :: DateTime
+  }
+
+type Genre =
+  { name :: String
+  , displayName :: String
   }
 
 data AppError
@@ -75,7 +81,9 @@ renderAppError = case _ of
 
 fetchMovies :: ExceptT AppError Aff (NonEmptyArray Movie)
 fetchMovies = do
-  let url = "http://167.99.230.0:8080/movies"
+  -- let url = "http://167.99.230.0:8080/movies"
+  -- let url = "http://localhost:8080/all-movies"
+  let url = "http://localhost:8080/movie"
   response <- ExceptT.withExceptT FetchError
     (ExceptT (Affjax.get ResponseFormat.json url))
   map amendMovieData <$> ExceptT.withExceptT DecodeError
@@ -85,6 +93,16 @@ fetchMovies = do
     if movie.year == 0 && String.contains (Pattern "Symbiopsychotaxiplasm") movie.title -- Bad data
     then movie { year = 1968 }
     else movie
+
+fetchGenres :: ExceptT AppError Aff (NonEmptyArray Genre)
+fetchGenres = do
+  -- let url = "http://167.99.230.0:8080/movies"
+  -- let url = "http://localhost:8080/all-movies"
+  let url = "http://localhost:8080/genre"
+  response <- ExceptT.withExceptT FetchError
+    (ExceptT (Affjax.get ResponseFormat.json url))
+  ExceptT.withExceptT DecodeError
+    (Except.except (Argonaut.decodeJson response.body))
 
 mkApp :: Component Unit
 mkApp = do
@@ -96,10 +114,13 @@ mkApp = do
   Hooks.component "App" \_ -> Hooks.do
     fetchMoviesResult <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchMovies
+    fetchGenresResult <- Hooks.Aff.useAff unit do
+      Except.runExceptT fetchGenres
     search /\ setSearch <- Hooks.useState' ""
     selectedYears /\ setSelectedYears <- Hooks.useState' Nothing
     selectedDirectors /\ setSelectedDirectors <- Hooks.useState' []
     selectedCountries /\ setSelectedCountries <- Hooks.useState' []
+    selectedGenres /\ setSelectedGenres <- Hooks.useState' []
     selectedSortMethods /\ setSelectedSortMethods <- Hooks.useState
       [ { key: Title, orientation: Neutral }
       , { key: Year, orientation: Neutral }
@@ -108,15 +129,21 @@ mkApp = do
       ]
     let comparison = sortMethodsToComparison selectedSortMethods
 
+    Hooks.useEffectAlways do
+      Debug.traceM fetchGenresResult
+      pure mempty
+
+    genreOptions <- Hooks.useMemo (fetchGenresResult ^? _Just <<< _Right) \_ ->
+      case fetchGenresResult of
+        Just (Right genres) -> Array.fromFoldable genres
+        _ -> mempty
+
     options <- Hooks.useMemo (fetchMoviesResult ^? _Just <<< _Right) \_ ->
       case fetchMoviesResult of
         Just (Right movies) ->
-          case
-            Semigroup.Foldable.foldMap1
-              (\{ director, country } -> { directors: Set.singleton director, countries: Set.singleton country })
-              movies
-            of
-            { directors, countries } -> { directors: Array.fromFoldable directors, countries: Array.fromFoldable countries }
+          { directors: Array.fromFoldable (Set.fromFoldable (_.director <$> movies))
+          , countries: Array.fromFoldable (Set.fromFoldable (_.country <$> movies))
+          }
         _ -> mempty
 
     pure
@@ -167,6 +194,14 @@ mkApp = do
                           }
                       ]
                   , DOM.div_
+                      [ autocomplete
+                          { options: genreOptions <#> _.name
+                          , value: selectedGenres
+                          , onChange: setSelectedGenres
+                          , label: "Filter by genre"
+                          }
+                      ]
+                  , DOM.div_
                       [ DOM.label_ [ DOM.text "Sort by" ]
                       , sortMethodSelector
                           { options: selectedSortMethods
@@ -180,7 +215,7 @@ mkApp = do
                   [ case fetchMoviesResult of
                       Nothing -> mempty
                       Just result' -> case result' of
-                        Left appError -> DOM.text (show appError)
+                        Left appError -> DOM.text (show (appError :: AppError))
                         Right movies -> do
                           let moviesFiltered = filterMovies { search, selectedDirectors, selectedYears, selectedCountries } movies
                           movieList (Array.sortBy comparison moviesFiltered)
@@ -223,7 +258,7 @@ mkMovieList = do
           , children: movies <#>
               \movie ->
                 Basic.keyed
-                  movie.movieId
+                  movie.movieID
                   (movieListItem movie)
           }
       )
