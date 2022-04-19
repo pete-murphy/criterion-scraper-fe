@@ -13,15 +13,12 @@ import Components.MUI.Slider (Range)
 import Components.MUI.Slider as Slider
 import Control.Monad.Except (ExceptT(..))
 import Control.Monad.Except as Except
-import Control.Monad.Except as ExceptT
 import Control.Monad.ST as ST
 import Data.Argonaut as Argonaut
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
-import Data.Array.NonEmpty as NonEmpty
 import Data.Array.ST as Array.ST
 import Data.Either (Either(..))
-import Data.Foldable (class Foldable)
 import Data.Foldable as Foldable
 import Data.Generic.Rep (class Generic)
 import Data.Lens.Fold ((^?))
@@ -30,16 +27,17 @@ import Data.Lens.Prism.Maybe (_Just)
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
 import Data.Monoid as Monoid
-import Data.Ord.Max (Max(..))
-import Data.Ord.Min (Min(..))
-import Data.Semigroup.Foldable as Semigroup.Foldable
-import Data.Set as Set
+import Data.Monoid.Endo (Endo(..))
+import Data.Newtype (unwrap)
 import Data.Show.Generic as Generic
 import Data.String (Pattern(..))
 import Data.String as String
+import Data.Traversable as Traversable
+import Data.Tuple (Tuple)
 import Debug as Debug
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Milliseconds(..))
+import Foreign.Hooks (useDebounce)
 import Foreign.Object as Object
 import Model.DateTime (DateTime)
 import React.Basic as Basic
@@ -49,6 +47,7 @@ import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
 import React.Basic.Hooks as Hooks
 import React.Basic.Hooks.Aff as Hooks.Aff
+import Web.URL.URLSearchParams as URLSearchParams
 
 type Movie =
   { title :: String
@@ -79,14 +78,15 @@ renderAppError = case _ of
   FetchError err -> Affjax.printError err
   DecodeError err -> show err
 
-fetchMovies :: ExceptT AppError Aff (NonEmptyArray Movie)
-fetchMovies = do
+-- fetchMovies :: String -> ExceptT AppError Aff (NonEmptyArray Movie)
+fetchMovies :: String -> ExceptT AppError Aff (Array Movie)
+fetchMovies url = do
   -- let url = "http://167.99.230.0:8080/movies"
-  -- let url = "http://localhost:8080/all-movies"
-  let url = "http://localhost:8080/movie"
-  response <- ExceptT.withExceptT FetchError
+  -- let url = "http://localhost:8080/movie"
+  -- let url = "http://localhost:8080/movie/paginated"
+  response <- Except.withExceptT FetchError
     (ExceptT (Affjax.get ResponseFormat.json url))
-  map amendMovieData <$> ExceptT.withExceptT DecodeError
+  map amendMovieData <$> Except.withExceptT DecodeError
     (Except.except (Argonaut.decodeJson response.body))
   where
   amendMovieData movie =
@@ -96,55 +96,137 @@ fetchMovies = do
 
 fetchGenres :: ExceptT AppError Aff (NonEmptyArray Genre)
 fetchGenres = do
-  -- let url = "http://167.99.230.0:8080/movies"
-  -- let url = "http://localhost:8080/all-movies"
   let url = "http://localhost:8080/genre"
-  response <- ExceptT.withExceptT FetchError
+  response <- Except.withExceptT FetchError
     (ExceptT (Affjax.get ResponseFormat.json url))
-  ExceptT.withExceptT DecodeError
+  Except.withExceptT DecodeError
     (Except.except (Argonaut.decodeJson response.body))
+
+fetchDirectors :: ExceptT AppError Aff (NonEmptyArray String)
+fetchDirectors = do
+  let url = "http://localhost:8080/director"
+  response <- Except.withExceptT FetchError
+    (ExceptT (Affjax.get ResponseFormat.json url))
+  Except.withExceptT DecodeError
+    (Except.except (Argonaut.decodeJson response.body))
+
+fetchCountries :: ExceptT AppError Aff (NonEmptyArray String)
+fetchCountries = do
+  let url = "http://localhost:8080/country"
+  response <- Except.withExceptT FetchError
+    (ExceptT (Affjax.get ResponseFormat.json url))
+  Except.withExceptT DecodeError
+    (Except.except (Argonaut.decodeJson response.body))
+
+mkURL
+  :: { search :: String
+     , selectedCountries :: Array String
+     , selectedDirectors :: Array String
+     , selectedGenres :: Array String
+     , selectedSortBys :: Array (SortBy MovieField)
+     , selectedYears :: Maybe { min :: Int, max :: Int }
+     }
+  -> String
+mkURL params = do
+  let
+    params' = [ { key: "search", value: params.search } ]
+      <> (params.selectedCountries <#> \value -> { key: "country", value })
+      <> (params.selectedDirectors <#> \value -> { key: "director", value })
+      <> (params.selectedGenres <#> \value -> { key: "genre", value })
+      <> (params.selectedSortBys <#> sortByToQueryParamValue >>= Array.fromFoldable <#> \value -> { key: "sort-by", value })
+      <> (Foldable.fold (params.selectedYears <#> \{ min, max } -> [ { key: "min-year", value: show min }, { key: "max-year", value: show max } ]))
+    searchParams =
+      URLSearchParams.fromString ""
+        # unwrap (params' # Foldable.foldMap \{ key, value } -> Endo (URLSearchParams.append key value))
+        # URLSearchParams.toString
+  "http://localhost:8080/movie/paginated?" <> searchParams
+
+sortByToQueryParamValue :: SortBy MovieField -> Maybe String
+sortByToQueryParamValue (SortBy { order: Nothing }) = Nothing
+sortByToQueryParamValue (SortBy { field, order: Just order }) = Just (field' <> ":" <> order')
+  where
+  field' = case field of
+    Title -> "title"
+    Year -> "year"
+    Director -> "director"
+    Country -> "country"
+  order' = case order of
+    Ascending -> "asc"
+    Descending -> "desc"
 
 mkApp :: Component Unit
 mkApp = do
   movieList <- mkMovieList
   selectedYearsSlider <- mkSelectedYearsSlider
   autocomplete <- Autocomplete.mkAutocomplete
-  sortMethodSelector <- mkSortMethodSelector
+  sortBysSelector <- mkSortBysSelector
 
   Hooks.component "App" \_ -> Hooks.do
-    fetchMoviesResult <- Hooks.Aff.useAff unit do
-      Except.runExceptT fetchMovies
-    fetchGenresResult <- Hooks.Aff.useAff unit do
-      Except.runExceptT fetchGenres
     search /\ setSearch <- Hooks.useState' ""
     selectedYears /\ setSelectedYears <- Hooks.useState' Nothing
     selectedDirectors /\ setSelectedDirectors <- Hooks.useState' []
     selectedCountries /\ setSelectedCountries <- Hooks.useState' []
     selectedGenres /\ setSelectedGenres <- Hooks.useState' []
-    selectedSortMethods /\ setSelectedSortMethods <- Hooks.useState
-      [ { key: Title, orientation: Neutral }
-      , { key: Year, orientation: Neutral }
-      , { key: Director, orientation: Neutral }
-      , { key: Country, orientation: Neutral }
+    selectedSortBys /\ setSelectedSortBys <- Hooks.useState
+      [ SortBy { field: Title, order: Nothing }
+      , SortBy { field: Year, order: Nothing }
+      , SortBy { field: Director, order: Nothing }
+      , SortBy { field: Country, order: Nothing }
       ]
-    let comparison = sortMethodsToComparison selectedSortMethods
+
+    debouncedValues <- useDebounce { search, selectedYears } (Milliseconds 500.0)
+
+    let
+      debouncedURL =
+        ( mkURL
+            { search: debouncedValues.search
+            , selectedYears: debouncedValues.selectedYears
+            , selectedDirectors
+            , selectedCountries
+            , selectedGenres
+            , selectedSortBys
+            }
+        )
+
+    fetchMoviesResult <- Hooks.Aff.useAff debouncedURL do
+      Except.runExceptT (fetchMovies debouncedURL)
+    fetchGenresResult <- Hooks.Aff.useAff unit do
+      Except.runExceptT fetchGenres
+    fetchDirectorsResult <- Hooks.Aff.useAff unit do
+      Except.runExceptT fetchDirectors
+    fetchCountriesResult <- Hooks.Aff.useAff unit do
+      Except.runExceptT fetchCountries
 
     Hooks.useEffectAlways do
       Debug.traceM fetchGenresResult
       pure mempty
+
+    Hooks.useEffectAlways do
+      Debug.traceM fetchDirectorsResult
+      pure mempty
+
+    countryOptions <- Hooks.useMemo (fetchCountriesResult ^? _Just <<< _Right) \_ ->
+      case fetchCountriesResult of
+        Just (Right countries) -> Array.fromFoldable countries
+        _ -> mempty
+
+    directorOptions <- Hooks.useMemo (fetchDirectorsResult ^? _Just <<< _Right) \_ ->
+      case fetchDirectorsResult of
+        Just (Right directors) -> Array.fromFoldable directors
+        _ -> mempty
 
     genreOptions <- Hooks.useMemo (fetchGenresResult ^? _Just <<< _Right) \_ ->
       case fetchGenresResult of
         Just (Right genres) -> Array.fromFoldable genres
         _ -> mempty
 
-    options <- Hooks.useMemo (fetchMoviesResult ^? _Just <<< _Right) \_ ->
-      case fetchMoviesResult of
-        Just (Right movies) ->
-          { directors: Array.fromFoldable (Set.fromFoldable (_.director <$> movies))
-          , countries: Array.fromFoldable (Set.fromFoldable (_.country <$> movies))
-          }
-        _ -> mempty
+    -- options <- Hooks.useMemo (fetchMoviesResult ^? _Just <<< _Right) \_ ->
+    --   case fetchMoviesResult of
+    --     Just (Right movies) ->
+    --       { directors: Array.fromFoldable (Set.fromFoldable (_.director <$> movies))
+    --       , countries: Array.fromFoldable (Set.fromFoldable (_.country <$> movies))
+    --       }
+    --     _ -> mempty
 
     pure
       ( DOM.main_
@@ -164,22 +246,23 @@ mkApp = do
                       }
                   , DOM.div_
                       [ selectedYearsSlider case fetchMoviesResult of
-                          Just (Right movies) -> Interactive
-                            { bounds:
-                                case
-                                  Semigroup.Foldable.foldMap1
-                                    (\{ year } -> { min: Min year, max: Max year })
-                                    movies
-                                  of
-                                  { min: Min min, max: Max max } -> { min, max }
+                          _ -> Interactive
+                            -- TODO: Get from server
+                            { bounds: { min: 1900, max: 2022 }
+                            -- case
+                            --   Semigroup.Foldable.foldMap1
+                            --     (\{ year } -> { min: Min year, max: Max year })
+                            --     movies
+                            --   of
+                            --   { min: Min min, max: Max max } -> { min, max }
                             , thumbs: selectedYears
                             , setThumbs: setSelectedYears
                             }
-                          _ -> NotInteractive
+                      -- _ -> NotInteractive
                       ]
                   , DOM.div_
                       [ autocomplete
-                          { options: options.directors
+                          { options: directorOptions
                           , value: selectedDirectors
                           , onChange: setSelectedDirectors
                           , label: "Filter by director"
@@ -187,7 +270,7 @@ mkApp = do
                       ]
                   , DOM.div_
                       [ autocomplete
-                          { options: options.countries
+                          { options: countryOptions
                           , value: selectedCountries
                           , onChange: setSelectedCountries
                           , label: "Filter by country"
@@ -203,9 +286,9 @@ mkApp = do
                       ]
                   , DOM.div_
                       [ DOM.label_ [ DOM.text "Sort by" ]
-                      , sortMethodSelector
-                          { options: selectedSortMethods
-                          , setOptions: setSelectedSortMethods
+                      , sortBysSelector
+                          { sortBys: selectedSortBys
+                          , setSortBys: setSelectedSortBys
                           }
                       ]
                   ]
@@ -217,36 +300,12 @@ mkApp = do
                       Just result' -> case result' of
                         Left appError -> DOM.text (show (appError :: AppError))
                         Right movies -> do
-                          let moviesFiltered = filterMovies { search, selectedDirectors, selectedYears, selectedCountries } movies
-                          movieList (Array.sortBy comparison moviesFiltered)
+                          -- TODO: Handle empty case
+                          movieList (Array.fromFoldable movies)
                   ]
               ]
           ]
       )
-
-filterMovies
-  :: { search :: String
-     , selectedYears :: Maybe Range
-     , selectedDirectors :: Array String
-     , selectedCountries :: Array String
-     }
-  -> NonEmptyArray Movie
-  -> Array Movie
-filterMovies { search, selectedYears, selectedDirectors, selectedCountries } = -- Array.take 10 <<<
-
-  NonEmpty.filter \{ title, year, director, country } ->
-    isInSelectedYears year
-      && fuzzySearchAny [ title, director, country ]
-      &&
-        ( isSelectedDirector director
-            || isSelectedCountry country
-            || (Foldable.all Foldable.null [ selectedDirectors, selectedCountries ])
-        )
-  where
-  isInSelectedYears year = Maybe.maybe true (\{ min, max } -> between min max year) selectedYears
-  fuzzySearchAny = Foldable.any (String.contains (Pattern (String.toLower search)) <<< String.toLower)
-  isSelectedDirector = flip Array.elem selectedDirectors
-  isSelectedCountry = flip Array.elem selectedCountries
 
 mkMovieList :: Component (Array Movie)
 mkMovieList = do
@@ -342,52 +401,33 @@ mkSelectedYearsSlider = do
           ]
       )
 
-data MovieKey
+data MovieField
   = Title
   | Year
   | Director
   | Country
 
-derive instance Generic MovieKey _
-derive instance Eq MovieKey
-derive instance Ord MovieKey
+derive instance Generic MovieField _
+derive instance Eq MovieField
+derive instance Ord MovieField
 
-instance Show MovieKey where
+instance Show MovieField where
   show = Generic.genericShow
 
-data KeyOrientation
-  = Neutral
-  | Ascending
+data SortOrder
+  = Ascending
   | Descending
 
-derive instance Generic KeyOrientation _
-derive instance Eq KeyOrientation
-derive instance Ord KeyOrientation
+derive instance Eq SortOrder
+derive instance Ord SortOrder
 
-instance Show KeyOrientation where
-  show = Generic.genericShow
+newtype SortBy a = SortBy { field :: a, order :: Maybe SortOrder }
 
-type SortMethod = { key :: MovieKey, orientation :: KeyOrientation }
-
-movieKeyToComparison :: MovieKey -> Movie -> Movie -> Ordering
-movieKeyToComparison = case _ of
-  Title -> comparing _.title
-  Year -> comparing _.year
-  Director -> comparing _.director
-  Country -> comparing _.country
-
-sortMethodsToComparison :: forall t. Foldable t => t SortMethod -> Movie -> Movie -> Ordering
-sortMethodsToComparison = Foldable.foldMap interpret
-  where
-  interpret { orientation: Neutral } = mempty
-  interpret { key, orientation: Ascending } = movieKeyToComparison key
-  interpret { key, orientation: Descending } = flip (movieKeyToComparison key)
-
-toggleOrientation :: KeyOrientation -> KeyOrientation
-toggleOrientation = case _ of
-  Neutral -> Ascending
-  Ascending -> Descending
-  Descending -> Neutral
+rotateOrder :: Maybe SortOrder -> Maybe SortOrder
+rotateOrder = case _ of
+  Nothing -> Just Ascending
+  Just Ascending -> Just Descending
+  Just Descending -> Nothing
 
 -- TODO: Not used
 moveFromTo :: forall a. Int -> Int -> Array a -> Array a
@@ -397,35 +437,34 @@ moveFromTo sourceIndex targetIndex xs = ST.run do
   _ <- Array.ST.splice targetIndex 0 x xs'
   Array.ST.freeze xs'
 
-mkSortMethodSelector
+mkSortBysSelector
   :: Component
-       { options :: Array SortMethod
-       , setOptions :: (Array SortMethod -> Array SortMethod) -> Effect Unit
+       { sortBys :: Array (SortBy MovieField)
+       , setSortBys :: (Array (SortBy MovieField) -> Array (SortBy MovieField)) -> Effect Unit
        }
-mkSortMethodSelector = do
+mkSortBysSelector = do
   dragAndDropList <- DragAndDropList.mkDragAndDropList
   Hooks.component "SortMethodSelector" \props -> Hooks.do
     pure
       ( dragAndDropList
-          { items: props.options
-          , setItems: \options -> props.setOptions (\_ -> options)
-          , keyForItem: \option -> show option.key
-          , isItemSelected: \option -> option.orientation /= Neutral
-          , renderItem: \option -> DOM.div
-              { className: "item-contents" <> Monoid.guard (option.orientation == Neutral) " neutral"
+          { items: props.sortBys
+          , setItems: \sortBys -> props.setSortBys (\_ -> sortBys)
+          , keyForItem: \(SortBy { field }) -> show field
+          , isItemSelected: \(SortBy { order }) -> order /= Nothing
+          , renderItem: \(SortBy { order, field }) -> DOM.div
+              { className: "item-contents" <> Monoid.guard (order == Nothing) " neutral"
               , children:
-                  ( case option.orientation of
-                      -- Neutral -> [ DOM.div_ [ DOM.text "•" ] ]
-                      Neutral -> []
-                      Ascending -> [ DOM.div_ [ DOM.text "↑" ] ]
-                      Descending -> [ DOM.div_ [ DOM.text "↓" ] ]
+                  ( case order of
+                      Nothing -> []
+                      Just Ascending -> [ DOM.div_ [ DOM.text "↑" ] ]
+                      Just Descending -> [ DOM.div_ [ DOM.text "↓" ] ]
                   ) <>
-                    [ DOM.div_ [ DOM.text (show option.key) ] ]
+                    [ DOM.div_ [ DOM.text (show field) ] ]
               }
-          , onClickItem: \option -> props.setOptions
-              ( map \option' ->
-                  if option.key == option'.key then option { orientation = toggleOrientation option.orientation }
-                  else option'
+          , onClickItem: \(SortBy clicked) -> props.setSortBys
+              ( map \sortBy@(SortBy { field }) ->
+                  if clicked.field == field then SortBy (clicked { order = rotateOrder clicked.order })
+                  else sortBy
               )
           }
       )

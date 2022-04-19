@@ -53,6 +53,7 @@ to generate this file without the comments in this block.
   , "validation"
   , "web-dom"
   , "web-html"
+  , "web-url"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
