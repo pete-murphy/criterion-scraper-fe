@@ -1,35 +1,54 @@
-module Foreign.Hooks where
+module Foreign.Hooks
+  ( UseIntersectionObserver
+  , useIntersectionObserver
+  ) where
 
 import Prelude
 
 import Data.Newtype (class Newtype)
-import Data.Time.Duration (Milliseconds(..))
-import Effect.Uncurried (EffectFn2)
+import Data.Nullable (Nullable)
+import Effect (Effect)
+import Effect.Uncurried (EffectFn1, EffectFn2)
 import Effect.Uncurried as Uncurried
+import React.Basic (Ref)
 import React.Basic.Hooks (Hook)
 import React.Basic.Hooks as Hooks
+import Web.DOM (Node)
 
-useDebounce
-  :: forall a
-   . a
-  -> Milliseconds
-  -> Hook UseDebounce a
+newtype UseIntersectionObserver hooks = UseIntersectionObserver hooks
 
-useDebounce value (Milliseconds milliseconds) =
+derive instance Newtype (UseIntersectionObserver hooks) _
+
+foreign import useIntersectionObserver_
+  :: EffectFn1
+       (Ref (Nullable Node))
+       Boolean
+
+useIntersectionObserver
+  :: Ref (Nullable Node)
+  -> Hook UseIntersectionObserver Boolean
+useIntersectionObserver ref =
   Hooks.unsafeHook
-    ( Uncurried.runEffectFn2
-        useDebounce_
-        value
-        milliseconds
+    ( Uncurried.runEffectFn1
+        useIntersectionObserver_
+        ref
     )
 
-newtype UseDebounce hooks = UseDebounce hooks
+-- |
+-- foreign import useIntersectionObserver_
+--   :: EffectFn2
+--        (Ref (Nullable Node))
+--        (EffectFn1 Boolean (Effect Unit))
+--        Unit
 
-derive instance Newtype (UseDebounce hooks) _
-
-foreign import useDebounce_
-  :: forall a
-   . EffectFn2
-       a
-       Number
-       a
+-- useIntersectionObserver
+--   :: Ref (Nullable Node)
+--   -> (Boolean -> Effect (Effect Unit))
+--   -> Hook UseIntersectionObserver Unit
+-- useIntersectionObserver ref withIntersection =
+--   Hooks.unsafeHook
+--     ( Uncurried.runEffectFn2
+--         useIntersectionObserver_
+--         ref
+--         (Uncurried.mkEffectFn1 withIntersection)
+--     )

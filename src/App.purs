@@ -29,17 +29,22 @@ import Data.Maybe as Maybe
 import Data.Monoid as Monoid
 import Data.Monoid.Endo (Endo(..))
 import Data.Newtype (unwrap)
+import Data.Nullable as Nullable
 import Data.Show.Generic as Generic
 import Data.String (Pattern(..))
 import Data.String as String
-import Data.Traversable as Traversable
-import Data.Tuple (Tuple)
-import Debug as Debug
+import Data.String.NonEmpty as String.NonEmpty
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds(..))
-import Foreign.Hooks (useDebounce)
+import Effect.Aff as Aff
+import Effect.Class as Effect
+import Effect.Class.Console as Console
+import Foreign.Hooks as Foreign.Hooks
 import Foreign.Object as Object
 import Model.DateTime (DateTime)
+import Network.RemoteData (RemoteData(..), _Success)
+import Network.RemoteData as RemoteData
+import Prelude as Applicative
 import React.Basic as Basic
 import React.Basic.DOM as DOM
 import React.Basic.DOM.Events as DOM.Events
@@ -47,14 +52,15 @@ import React.Basic.Events as Events
 import React.Basic.Hooks (Component, (/\))
 import React.Basic.Hooks as Hooks
 import React.Basic.Hooks.Aff as Hooks.Aff
+import React.Basic.Hooks.ResetToken as Hooks.ResetToken
 import Web.URL.URLSearchParams as URLSearchParams
 
 type Movie =
-  { title :: String
+  { id :: String
+  , title :: String
   , year :: Int
   , director :: String
   , country :: String
-  , movieID :: String
   , thumbnailURL :: String
   , detailsURL :: String
   , created :: DateTime
@@ -78,12 +84,8 @@ renderAppError = case _ of
   FetchError err -> Affjax.printError err
   DecodeError err -> show err
 
--- fetchMovies :: String -> ExceptT AppError Aff (NonEmptyArray Movie)
 fetchMovies :: String -> ExceptT AppError Aff (Array Movie)
 fetchMovies url = do
-  -- let url = "http://167.99.230.0:8080/movies"
-  -- let url = "http://localhost:8080/movie"
-  -- let url = "http://localhost:8080/movie/paginated"
   response <- Except.withExceptT FetchError
     (ExceptT (Affjax.get ResponseFormat.json url))
   map amendMovieData <$> Except.withExceptT DecodeError
@@ -125,16 +127,23 @@ mkURL
      , selectedGenres :: Array String
      , selectedSortBys :: Array (SortBy MovieField)
      , selectedYears :: Maybe { min :: Int, max :: Int }
+     , limitPerPage :: Int
      }
   -> String
 mkURL params = do
   let
-    params' = [ { key: "search", value: params.search } ]
+    params' = Array.fromFoldable (String.NonEmpty.fromString params.search <#> \value -> { key: "search", value: String.NonEmpty.toString value })
       <> (params.selectedCountries <#> \value -> { key: "country", value })
       <> (params.selectedDirectors <#> \value -> { key: "director", value })
       <> (params.selectedGenres <#> \value -> { key: "genre", value })
       <> (params.selectedSortBys <#> sortByToQueryParamValue >>= Array.fromFoldable <#> \value -> { key: "sort-by", value })
-      <> (Foldable.fold (params.selectedYears <#> \{ min, max } -> [ { key: "min-year", value: show min }, { key: "max-year", value: show max } ]))
+      <>
+        ( Foldable.fold
+            ( params.selectedYears
+                <#> \{ min, max } -> [ { key: "min-year", value: show min }, { key: "max-year", value: show max } ]
+            )
+        )
+      <> [ { key: "limit", value: show params.limitPerPage } ]
     searchParams =
       URLSearchParams.fromString ""
         # unwrap (params' # Foldable.foldMap \{ key, value } -> Endo (URLSearchParams.append key value))
@@ -153,6 +162,10 @@ sortByToQueryParamValue (SortBy { field, order: Just order }) = Just (field' <> 
   order' = case order of
     Ascending -> "asc"
     Descending -> "desc"
+
+-- TODO: Hard-coded based on full screen on my 13-inch laptop :)
+limitPerPage :: Int
+limitPerPage = 25
 
 mkApp :: Component Unit
 mkApp = do
@@ -173,23 +186,62 @@ mkApp = do
       , SortBy { field: Director, order: Nothing }
       , SortBy { field: Country, order: Nothing }
       ]
+    pageNumber /\ setPageNumber <- Hooks.useState 1
+    hasNext /\ setHasNext <- Hooks.useState' true
+    resetToken /\ reset <- Hooks.ResetToken.useResetToken
 
-    debouncedValues <- useDebounce { search, selectedYears } (Milliseconds 500.0)
+    -- Debounce the search & selected years inputs (these are the only inputs that can change rapidly)
+    debouncedValues /\ setDebouncedValues <- Hooks.useState' { search, selectedYears }
+    Hooks.Aff.useAff { search, selectedYears } do
+      Aff.delay (Milliseconds 200.0)
+      Effect.liftEffect (setDebouncedValues { search, selectedYears })
 
     let
       debouncedURL =
-        ( mkURL
-            { search: debouncedValues.search
-            , selectedYears: debouncedValues.selectedYears
-            , selectedDirectors
-            , selectedCountries
-            , selectedGenres
-            , selectedSortBys
-            }
-        )
+        mkURL
+          { search: debouncedValues.search
+          , selectedYears: debouncedValues.selectedYears
+          , selectedDirectors
+          , selectedCountries
+          , selectedGenres
+          , selectedSortBys
+          -- , pageNumber
+          -- Hard-coded above
+          , limitPerPage
+          }
 
-    fetchMoviesResult <- Hooks.Aff.useAff debouncedURL do
-      Except.runExceptT (fetchMovies debouncedURL)
+    fetchMoviesResult /\ setFetchMoviesResult <- Hooks.useState (NotAsked :: RemoteData AppError (Array Movie))
+    Hooks.Aff.useAff debouncedURL do
+      Effect.liftEffect (Console.log debouncedURL)
+      Effect.liftEffect (setPageNumber \_ -> 1)
+      Effect.liftEffect do
+        -- Transition to loading state if not yet fetched, otherwise no update
+        setFetchMoviesResult case _ of
+          NotAsked -> Loading
+          x -> x
+      result <- Except.runExceptT (fetchMovies debouncedURL)
+      Effect.liftEffect (setFetchMoviesResult \_ -> RemoteData.fromEither result)
+      -- Console.log "(((result ^? _Right) <#> Array.length) == Just limitPerPage)"
+      -- Console.logShow (((result ^? _Right) <#> Array.length) == Just limitPerPage)
+      Effect.liftEffect (setHasNext (((result ^? _Right) <#> Array.length) == Just limitPerPage))
+
+    Hooks.Aff.useAff pageNumber do
+      -- Do nothing if pageNumber is 1
+      Applicative.when (pageNumber > 1 && hasNext) do
+        let
+          searchParams = URLSearchParams.fromString ""
+            # URLSearchParams.append "offset" (show ((pageNumber - 1) * limitPerPage))
+            # URLSearchParams.toString
+        result <- Except.runExceptT (fetchMovies (debouncedURL <> "&" <> searchParams))
+        Effect.liftEffect (setHasNext (((result ^? _Right) <#> Array.length) == Just limitPerPage))
+        let
+          resultRemoteData = RemoteData.fromEither result
+          concatResults prevResult = case prevResult, resultRemoteData of
+            Success prevMovies, Success nextMovies -> Success (prevMovies <> nextMovies)
+            _, _ -> RemoteData.fromEither result
+
+        Effect.liftEffect (setFetchMoviesResult concatResults)
+
     fetchGenresResult <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchGenres
     fetchDirectorsResult <- Hooks.Aff.useAff unit do
@@ -197,36 +249,31 @@ mkApp = do
     fetchCountriesResult <- Hooks.Aff.useAff unit do
       Except.runExceptT fetchCountries
 
-    Hooks.useEffectAlways do
-      Debug.traceM fetchGenresResult
-      pure mempty
-
-    Hooks.useEffectAlways do
-      Debug.traceM fetchDirectorsResult
-      pure mempty
-
+    genreOptions <- Hooks.useMemo (fetchGenresResult ^? _Just <<< _Right) \_ ->
+      case fetchGenresResult of
+        Just (Right genres) -> Array.fromFoldable genres
+        _ -> mempty
+    directorOptions <- Hooks.useMemo (fetchDirectorsResult ^? _Just <<< _Right) \_ ->
+      case fetchDirectorsResult of
+        Just (Right directors) -> Array.fromFoldable directors
+        _ -> mempty
     countryOptions <- Hooks.useMemo (fetchCountriesResult ^? _Just <<< _Right) \_ ->
       case fetchCountriesResult of
         Just (Right countries) -> Array.fromFoldable countries
         _ -> mempty
 
-    directorOptions <- Hooks.useMemo (fetchDirectorsResult ^? _Just <<< _Right) \_ ->
-      case fetchDirectorsResult of
-        Just (Right directors) -> Array.fromFoldable directors
-        _ -> mempty
+    sentinelRef <- Hooks.useRef Nullable.null
 
-    genreOptions <- Hooks.useMemo (fetchGenresResult ^? _Just <<< _Right) \_ ->
-      case fetchGenresResult of
-        Just (Right genres) -> Array.fromFoldable genres
-        _ -> mempty
+    isIntersecting <- Foreign.Hooks.useIntersectionObserver sentinelRef
+    Hooks.useEffect isIntersecting do
+      Applicative.when (isIntersecting && hasNext) (setPageNumber (_ + 1))
+      pure mempty
 
-    -- options <- Hooks.useMemo (fetchMoviesResult ^? _Just <<< _Right) \_ ->
-    --   case fetchMoviesResult of
-    --     Just (Right movies) ->
-    --       { directors: Array.fromFoldable (Set.fromFoldable (_.director <$> movies))
-    --       , countries: Array.fromFoldable (Set.fromFoldable (_.country <$> movies))
-    --       }
-    --     _ -> mempty
+    -- Foreign.Hooks.useIntersectionObserver sentinelRef \isIntersecting -> do
+    --   Console.logShow isIntersecting
+    --   Applicative.when (isIntersecting && hasNext && RemoteData.isSuccess fetchMoviesResult) do
+    --     setPageNumber (_ + 1)
+    --   pure mempty
 
     pure
       ( DOM.main_
@@ -235,7 +282,7 @@ mkApp = do
                   [ DOM.div
                       { className: "search"
                       , children:
-                          [ DOM.label_ [ DOM.text "Search" ]
+                          [ DOM.label_ [ DOM.text "Search in title" ]
                           , DOM.input
                               { value: search
                               , type: "search"
@@ -249,12 +296,6 @@ mkApp = do
                           _ -> Interactive
                             -- TODO: Get from server
                             { bounds: { min: 1900, max: 2022 }
-                            -- case
-                            --   Semigroup.Foldable.foldMap1
-                            --     (\{ year } -> { min: Min year, max: Max year })
-                            --     movies
-                            --   of
-                            --   { min: Min min, max: Max max } -> { min, max }
                             , thumbs: selectedYears
                             , setThumbs: setSelectedYears
                             }
@@ -296,13 +337,14 @@ mkApp = do
           , DOM.section_
               [ DOM.div_
                   [ case fetchMoviesResult of
-                      Nothing -> mempty
-                      Just result' -> case result' of
-                        Left appError -> DOM.text (show (appError :: AppError))
-                        Right movies -> do
-                          -- TODO: Handle empty case
-                          movieList (Array.fromFoldable movies)
+                      NotAsked -> mempty
+                      Loading -> mempty
+                      Failure appError -> DOM.text (show (appError :: AppError))
+                      Success movies ->
+                        -- TODO: Handle empty array case
+                        movieList (Array.fromFoldable movies)
                   ]
+              , DOM.div { className: "sentinel", ref: sentinelRef }
               ]
           ]
       )
@@ -317,7 +359,7 @@ mkMovieList = do
           , children: movies <#>
               \movie ->
                 Basic.keyed
-                  movie.movieID
+                  movie.id
                   (movieListItem movie)
           }
       )
@@ -331,26 +373,28 @@ mkMovieListItem = do
     isLoading /\ setIsLoading <- Hooks.useState' true
     pure
       ( DOM.li_
-          [ DOM.div_ []
-          , DOM.figure
+          [ DOM.figure
               { _data:
                   Object.singleton "movie" movie.title
 
               , className:
                   Monoid.guard isLoading "hidden"
               , children:
-                  -- [ DOM.div_ [ DOM.text movie.title ]
-                  -- , DOM.div_ [ DOM.text (show movie.year) ]
-                  -- , DOM.div_ [ DOM.text movie.director ]
-                  -- ]
-                  [ Hooks.element img
-                      { src: movie.thumbnailURL <> "?auto=format%2Ccompress&q=100&w=400"
-                      , onLoad: Events.handler_ do
-                          setIsLoading false
-                      , loading: "lazy"
-                      }
+                  [ DOM.div_
+                      [ Hooks.element img
+                          { src: movie.thumbnailURL <> "?auto=format%2Ccompress&q=100&w=380&crop=left&h=500&fit=crop"
+                          , onLoad: Events.handler_ do
+                              setIsLoading false
+                          , loading: "lazy"
+                          }
+                      ]
                   ]
               }
+          , DOM.div_
+              [ DOM.h3_ [ DOM.text movie.title ]
+              , DOM.div_ [ DOM.text (show movie.year) ]
+              ]
+
           ]
       )
 

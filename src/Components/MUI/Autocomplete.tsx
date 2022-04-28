@@ -114,7 +114,6 @@ const StyledTag = styled(Tag)<TagProps>(
   & svg {
     font-size: 12px;
     cursor: pointer;
-    padding: 4px;
   }
 `
 );
